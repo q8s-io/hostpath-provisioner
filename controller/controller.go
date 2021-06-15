@@ -51,8 +51,9 @@ import (
 	ref "k8s.io/client-go/tools/reference"
 	"k8s.io/client-go/util/workqueue"
 	glog "k8s.io/klog"
-	"kubevirt.io/hostpath-provisioner/controller/metrics"
 	"sigs.k8s.io/sig-storage-lib-external-provisioner/v6/util"
+
+	"kubevirt.io/hostpath-provisioner/controller/metrics"
 )
 
 // annClass annotation represents the storage class associated with a resource:
@@ -1331,7 +1332,6 @@ func (ctrl *ProvisionController) deleteVolumeOperation(volume *v1.PersistentVolu
 		glog.Info(logOperation(operation, "persistentvolume no longer needs deletion, skipping"))
 		return nil
 	}
-
 	err = ctrl.provisioner.Delete(volume)
 	if err != nil {
 		if ierr, ok := err.(*IgnoredError); ok {
