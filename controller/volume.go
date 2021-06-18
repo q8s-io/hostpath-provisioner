@@ -39,6 +39,7 @@ type Provisioner interface {
 	Delete(*v1.PersistentVolume) error
 	GetNodeName() string
 	GetNamespace() string
+	GetOwnerReferences() string
 }
 
 // Qualifier is an optional interface implemented by provisioners to determine

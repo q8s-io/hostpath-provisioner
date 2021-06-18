@@ -16,12 +16,16 @@
 
 KUBEVIRT_PROVIDER?=k8s-1.18
 HPP_IMAGE?=hostpath-provisioner
-TAG?=latest
-DOCKER_REPO?=kubevirt
+#TAG?=latest
+TAG=v1
+DOCKER_REPO?=registry.foundary.zone:8360/infra
 ARTIFACTS_PATH?=_out
 
 all: controller hostpath-provisioner
 
+up: hostpath-provisioner
+	docker build -t $(DOCKER_REPO)/$(HPP_IMAGE):$(TAG) -f Dockerfile .
+	docker push $(DOCKER_REPO)/$(HPP_IMAGE):$(TAG)
 controller:
 	CGO_ENABLED=0 go build -a -ldflags '-extldflags "-static"' controller
 

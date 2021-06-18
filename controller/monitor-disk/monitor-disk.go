@@ -3,9 +3,7 @@ package monitor_disk
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
-	"github.com/prometheus/common/log"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -20,12 +18,13 @@ import (
 
 type ModifyDiskArgs struct {
 	// NodeName as diskMonitorCR name
-	CRName    string
-	Namespace string
-	Path      string
-	Operation string
-	DiskInfo  *v1.DiskDetail
-	Require   *resource.Quantity
+	CRName          string
+	Namespace       string
+	Path            string
+	Operation       string
+	OwnerReferences string
+	DiskInfo        *v1.DiskDetail
+	Require         *resource.Quantity
 }
 
 var gvr = schema.GroupVersionResource{
@@ -55,95 +54,90 @@ func List(namespace string) (*v1.DiskMonitorList, error) {
 	if err != nil {
 		return nil, err
 	}
-	var ctList v1.DiskMonitorList
-	if err := json.Unmarshal(data, &ctList); err != nil {
+	var diskMonitorList v1.DiskMonitorList
+	if err := json.Unmarshal(data, &diskMonitorList); err != nil {
 		return nil, err
 	}
-	js, _ := json.Marshal(ctList.Items)
-	fmt.Println("list", string(js))
-	return &ctList, nil
+	js, _ := json.Marshal(diskMonitorList.Items)
+	glog.Info("DiskMonitorList list", string(js))
+	return &diskMonitorList, nil
 }
 
 func Get(namespace string, name string) (*v1.DiskMonitor, error) {
 	client := getDynamicClientSet()
 	utd, err := client.Resource(gvr).Namespace(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
+		glog.Error("get DiskMonitor err:", err)
 		return nil, err
 	}
 	data, err := utd.MarshalJSON()
 	if err != nil {
+		glog.Error("get DiskMonitor Marshal err:", err)
 		return nil, err
 	}
 	var ct v1.DiskMonitor
 	if err := json.Unmarshal(data, &ct); err != nil {
+		glog.Error("get DiskMonitor UnMarshal err:", err)
 		return nil, err
 	}
 	js, _ := json.Marshal(ct)
-	fmt.Println("get", string(js))
+	glog.Info("DiskMonitor get", string(js))
 	return &ct, nil
 }
 
 func Delete(namespace string, name string) error {
 	client := getDynamicClientSet()
-	// return client.Resource(gvr).Namespace(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
 	return client.Resource(gvr).Namespace(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
-}
-
-func setFinalizer(monitor *v1.DiskMonitor) {
-	finalizersMsg := "in-use"
-	if monitor.ObjectMeta.DeletionTimestamp.IsZero() {
-		monitor.ObjectMeta.Finalizers = append(monitor.ObjectMeta.Finalizers, finalizersMsg)
-	}
 }
 
 func Create(ns string, monitor *v1.DiskMonitor) (*v1.DiskMonitor, error) {
 	client := getDynamicClientSet()
+	js, _ := json.Marshal(monitor)
+	glog.Info("monitor create info: ", string(js))
 	obj, err := Convert2Unstruct(monitor)
 	if err != nil {
-		log.Error(err)
 		return nil, err
 	}
 	utd, err := client.Resource(gvr).Namespace(ns).Create(context.TODO(), obj, metav1.CreateOptions{})
 	if err != nil {
-		log.Error(err)
+		glog.Error("DiskMonitor create err ", err)
 		return nil, err
 	}
 	data, err := utd.MarshalJSON()
 	if err != nil {
-		log.Error("create", err)
+		glog.Error("DiskMonitor create MarshalJSON err", err)
 		return nil, err
 	}
-	var ct v1.DiskMonitor
-	if err := json.Unmarshal(data, &ct); err != nil {
-		log.Error("create", err)
+	var diskMonitor v1.DiskMonitor
+	if err := json.Unmarshal(data, &diskMonitor); err != nil {
+		glog.Error("DiskMonitor create Unmarshal err", err)
 		return nil, err
 	}
-	return &ct, nil
+	return &diskMonitor, nil
 }
 
 func Update(ns string, monitor *v1.DiskMonitor) (*v1.DiskMonitor, error) {
 	client := getDynamicClientSet()
 	obj, err := Convert2Unstruct(monitor)
 	if err != nil {
-		log.Error(err)
 		return nil, err
 	}
 	utd, err := client.Resource(gvr).Namespace(ns).Update(context.TODO(), obj, metav1.UpdateOptions{})
 	if err != nil {
-		log.Error(err)
+		glog.Error(err)
 		return nil, err
 	}
 	data, err := utd.MarshalJSON()
 	if err != nil {
-		log.Error("create", err)
+		glog.Error("update DiskMonitor err: ", err)
 		return nil, err
 	}
-	var ct v1.DiskMonitor
-	if err := json.Unmarshal(data, &ct); err != nil {
-		log.Error("create", err)
+	var diskMonitor v1.DiskMonitor
+	if err := json.Unmarshal(data, &diskMonitor); err != nil {
+		glog.Error("update DiskMonitor Unmarshal err", err)
 		return nil, err
 	}
-	return &ct, nil
+	return &diskMonitor, nil
 }
 
 func Convert2Unstruct(diskMonitor *v1.DiskMonitor) (*unstructured.Unstructured, error) {
@@ -151,7 +145,7 @@ func Convert2Unstruct(diskMonitor *v1.DiskMonitor) (*unstructured.Unstructured, 
 	obj := &unstructured.Unstructured{}
 	bt, _ := json.Marshal(diskMonitor)
 	if _, _, err := decoder.Decode(bt, &gvk, obj); err != nil {
-		log.Error("create", err)
+		glog.Error("Convert2Unstruct", err)
 		return nil, err
 	}
 	return obj, nil

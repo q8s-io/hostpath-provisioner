@@ -57,6 +57,7 @@ type hostPathProvisioner struct {
 	identity        string
 	nodeName        string
 	namespace       string
+	ownerReferences string
 	useNamingPrefix bool
 }
 
@@ -78,6 +79,7 @@ func NewHostPathProvisioner() controller.Provisioner {
 		glog.Fatal("env variable NODE_NAME must be set so that this provisioner can identify itself")
 	}
 	nameSpace := os.Getenv("NAMESPACE")
+	ownerReferences := os.Getenv("OWNERREFERENCES")
 
 	// note that the pvDir variable informs us *where* the provisioner should be writing backing files to
 	// this needs to match the path speciied in the volumes.hostPath spec of the deployment
@@ -96,6 +98,7 @@ func NewHostPathProvisioner() controller.Provisioner {
 		nodeName:        nodeName,
 		useNamingPrefix: useNamingPrefix,
 		namespace:       nameSpace,
+		ownerReferences: ownerReferences,
 	}
 }
 
@@ -181,7 +184,9 @@ func isPVOnCurrentNode(nodeName, volumeNode string) bool {
 func updateDiskRecords(args *monitor_disk.ModifyDiskArgs) error {
 	monitor, err := monitor_disk.Get(args.Namespace, args.CRName)
 	if err != nil && strings.Contains(fmt.Sprintf("%s", err), "not found") {
-		_ = createDiskMonitorCR(args.Namespace, args.CRName)
+		if err = createDiskMonitorCR(args.Namespace, args.OwnerReferences, args.CRName); err != nil {
+			return err
+		}
 	} else if err != nil {
 		glog.Error("get monitor disk err %v", err)
 		return err
@@ -237,10 +242,11 @@ func (p *hostPathProvisioner) Provision(options controller.ProvisionOptions) (*v
 			return nil, err
 		}
 		var monitorArgs = monitor_disk.ModifyDiskArgs{
-			CRName:    p.nodeName,
-			Namespace: p.namespace,
-			Path:      vPath,
-			Operation: monitor_disk.OPERATE_UPDATE,
+			CRName:          p.nodeName,
+			Namespace:       p.namespace,
+			OwnerReferences: p.ownerReferences,
+			Path:            vPath,
+			Operation:       monitor_disk.OPERATE_UPDATE,
 			DiskInfo: &diskv1.DiskDetail{
 				diskv1.Detail{
 					"pvName":  options.PVName,
@@ -249,7 +255,9 @@ func (p *hostPathProvisioner) Provision(options controller.ProvisionOptions) (*v
 			},
 			Require: options.PVC.Spec.Resources.Requests.Storage(),
 		}
-		_ = updateDiskRecords(&monitorArgs)
+		if err = updateDiskRecords(&monitorArgs); err != nil {
+			return nil, err
+		}
 		pv := &v1.PersistentVolume{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: options.PVC.Namespace + "." + options.PVName,
@@ -301,6 +309,9 @@ func (p *hostPathProvisioner) GetNodeName() string {
 func (p *hostPathProvisioner) GetNamespace() string {
 	return p.namespace
 }
+func (p *hostPathProvisioner) GetOwnerReferences() string {
+	return p.ownerReferences
+}
 
 // Delete removes the storage asset that was created by Provision represented
 // by the given PV.
@@ -322,13 +333,16 @@ func (p *hostPathProvisioner) Delete(volume *v1.PersistentVolume) error {
 		return err
 	}
 	var monitorArgs = monitor_disk.ModifyDiskArgs{
-		CRName:    p.nodeName,
-		Path:      path,
-		Operation: monitor_disk.OPERATE_DELETE,
-		DiskInfo:  nil,
-		Require:   volume.Spec.Capacity.Storage(),
+		CRName:          p.nodeName,
+		OwnerReferences: p.ownerReferences,
+		Path:            path,
+		Operation:       monitor_disk.OPERATE_DELETE,
+		DiskInfo:        nil,
+		Require:         volume.Spec.Capacity.Storage(),
 	}
-	_ = updateDiskRecords(&monitorArgs)
+	if err := updateDiskRecords(&monitorArgs); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -372,15 +386,22 @@ func roundDownCapacityPretty(capacityBytes int64) int64 {
 	}
 	return capacityBytes
 }
-func getDaemonSet(ns string) (*appsv1.DaemonSet, error) {
+func getDaemonSet(ns, ownerReferences string) (*appsv1.DaemonSet, error) {
 	daemonSetsList, err := getClientSet().AppsV1().DaemonSets(ns).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		glog.Error("get daemonSet err: ", err)
 		return nil, err
 	}
-	return &daemonSetsList.Items[0], nil
+	for _, daemonSet := range daemonSetsList.Items {
+		if strings.Contains(ownerReferences, daemonSet.Name) {
+			return &daemonSet, nil
+		}
+	}
+	errMsg := "OWNERREFERENCES Setting error: " + ownerReferences
+	glog.Error(errMsg)
+	return nil, errors.New(errMsg)
 }
-func createDiskMonitorCR(ns, nodeName string) error {
+func createDiskMonitorCR(ns, ownerReferences, nodeName string) error {
 	mpDiskInfo := map[diskv1.PVPath]diskv1.DiskDetail{}
 	pvCapacity, _ := calculatePvCapacity("/mnt/disks/")
 	pvs, err := getExistPV()
@@ -388,9 +409,9 @@ func createDiskMonitorCR(ns, nodeName string) error {
 		return err
 	}
 
-	daemonSet, err := getDaemonSet(ns)
-	if err != nil {
-		return err
+	daemonSet, errds := getDaemonSet(ns, ownerReferences)
+	if errds != nil {
+		return errds
 	}
 	var required resource.Quantity
 	if pvs != nil {
@@ -432,7 +453,10 @@ func createDiskMonitorCR(ns, nodeName string) error {
 			DiskInfo: mpDiskInfo,
 		},
 	}
-	_, _ = monitor_disk.Create(ns, &monitor)
+	_, err = monitor_disk.Create(ns, &monitor)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 func main() {
@@ -463,8 +487,9 @@ func main() {
 	// the controller
 	hostPathProvisioner := NewHostPathProvisioner()
 
-	err = createDiskMonitorCR(hostPathProvisioner.GetNamespace(), hostPathProvisioner.GetNodeName())
+	err = createDiskMonitorCR(hostPathProvisioner.GetNamespace(), hostPathProvisioner.GetOwnerReferences(), hostPathProvisioner.GetNodeName())
 	if err != nil {
+		glog.Error("create Monitor CR err,process exited!: ", err)
 		return
 	}
 	glog.Infof("creating provisioner controller with name: %s\n", provisionerName)
