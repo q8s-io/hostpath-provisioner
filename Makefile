@@ -15,10 +15,11 @@
 .PHONY: cluster-up cluster-down cluster-sync cluster-clean
 
 KUBEVIRT_PROVIDER?=k8s-1.18
-HPP_IMAGE?=hostpath-provisioner
+HPP_IMAGE?=kubevirt-hostpath-provisioner
 #TAG?=latest
-TAG=v1
-DOCKER_REPO?=registry.foundary.zone:8360/infra
+TAG=v1.1
+#DOCKER_REPO?=registry.foundary.zone:8360/infra
+DOCKER_REPO?=uhub.service.ucloud.cn/infra
 ARTIFACTS_PATH?=_out
 
 all: controller hostpath-provisioner

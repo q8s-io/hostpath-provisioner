@@ -25,6 +25,7 @@ import (
 	"path"
 	"strings"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -459,6 +460,52 @@ func createDiskMonitorCR(ns, ownerReferences, nodeName string) error {
 	}
 	return nil
 }
+
+func InspectionMonitorDisk(ctx context.Context, nodeName, ns, cRName string) {
+
+	for {
+		var CurCap resource.Quantity
+		mpDiskInfo := map[diskv1.PVPath]diskv1.DiskDetail{}
+		time.Sleep(time.Second * 5)
+		pvs, err := getExistPV()
+		if err != nil {
+			glog.Error("get existed PV err", err)
+			continue
+		}
+		monitorDisk, err := monitor_disk.Get(ns, cRName)
+		if err != nil {
+			glog.Error("get monitor disk CR err", err)
+			continue
+		}
+
+		if pvs != nil {
+			for _, pv := range pvs.Items {
+				if !isPVOnCurrentNode(nodeName, pv.Annotations["kubevirt.io/provisionOnNode"]) {
+					continue
+				}
+				if pv.Spec.StorageClassName == StorageClassName {
+					CurCap.Add(*pv.Spec.Capacity.Storage())
+					mpDiskInfo[diskv1.PVPath(pv.Spec.HostPath.Path)] = diskv1.DiskDetail{
+						diskv1.Detail{
+							"pvName":  pv.Name,
+							"require": pv.Spec.Capacity.Storage().String(),
+						},
+					}
+				} else {
+					continue
+				}
+			}
+		} else {
+			continue
+		}
+		monitorDisk.Status.Required = &CurCap
+		monitorDisk.Status.DiskInfo = mpDiskInfo
+		if _, err = monitor_disk.Update(ns, monitorDisk); err != nil {
+			glog.Error("update monitor disk err: ", err)
+		}
+	}
+}
+
 func main() {
 	syscall.Umask(0)
 
@@ -492,6 +539,7 @@ func main() {
 		glog.Error("create Monitor CR err,process exited!: ", err)
 		return
 	}
+	go InspectionMonitorDisk(context.TODO(), hostPathProvisioner.GetNodeName(), hostPathProvisioner.GetNamespace(), hostPathProvisioner.GetNodeName())
 	glog.Infof("creating provisioner controller with name: %s\n", provisionerName)
 	// Start the provision controller which will dynamically provision hostPath
 	// PVs

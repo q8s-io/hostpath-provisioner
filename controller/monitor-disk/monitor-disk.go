@@ -75,14 +75,12 @@ func Get(namespace string, name string) (*v1.DiskMonitor, error) {
 		glog.Error("get DiskMonitor Marshal err:", err)
 		return nil, err
 	}
-	var ct v1.DiskMonitor
-	if err := json.Unmarshal(data, &ct); err != nil {
+	var diskMonitor v1.DiskMonitor
+	if err := json.Unmarshal(data, &diskMonitor); err != nil {
 		glog.Error("get DiskMonitor UnMarshal err:", err)
 		return nil, err
 	}
-	js, _ := json.Marshal(ct)
-	glog.Info("DiskMonitor get", string(js))
-	return &ct, nil
+	return &diskMonitor, nil
 }
 
 func Delete(namespace string, name string) error {
