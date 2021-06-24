@@ -67,7 +67,7 @@ func Get(namespace string, name string) (*v1.DiskMonitor, error) {
 	client := getDynamicClientSet()
 	utd, err := client.Resource(gvr).Namespace(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
-		glog.Error("get DiskMonitor err:", err)
+		glog.Error("get namespace/name %v/%v DiskMonitor err: %v", namespace, name, err)
 		return nil, err
 	}
 	data, err := utd.MarshalJSON()

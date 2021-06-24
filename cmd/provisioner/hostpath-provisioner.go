@@ -138,10 +138,10 @@ func (p *hostPathProvisioner) ShouldProvision(pvc *v1.PersistentVolumeClaim, bin
 
 	if shouldProvision {
 		pvCapacity, err := calculatePvCapacity(p.pvDir)
-		totalFree, _ := getFreeSpace(pvCapacity)
+		totalFree, _ := getFreeSpace(p.nodeName, pvCapacity)
 
 		if pvCapacity != nil && totalFree.Cmp(pvc.Spec.Resources.Requests[(v1.ResourceStorage)]) < 0 {
-			glog.Error("PVC request size larger than total possible PV size")
+			glog.Error("PVC request size larger than total possible PV size,totalFree = ", totalFree.String())
 			shouldProvision = false
 		} else if err != nil {
 			glog.Errorf("Unable to determine pvCapacity %v", err)
@@ -160,13 +160,16 @@ func getExistPV() (*v1.PersistentVolumeList, error) {
 	return pvs, nil
 }
 
-func getFreeSpace(total *resource.Quantity) (*resource.Quantity, error) {
+func getFreeSpace(nodeName string, total *resource.Quantity) (*resource.Quantity, error) {
 	pvs, err := getExistPV()
 	if err != nil {
 		return nil, err
 	}
 	if pvs != nil {
 		for _, pv := range pvs.Items {
+			if !isPVOnCurrentNode(nodeName, pv.Annotations["kubevirt.io/provisionOnNode"]) {
+				continue
+			}
 			if pv.Spec.StorageClassName == StorageClassName {
 				total.Sub(*pv.Spec.Capacity.Storage())
 			}
@@ -331,9 +334,11 @@ func (p *hostPathProvisioner) Delete(volume *v1.PersistentVolume) error {
 	path := volume.Spec.PersistentVolumeSource.HostPath.Path
 	glog.Infof("removing backing directory: %v", path)
 	if err := os.RemoveAll(path); err != nil {
+		glog.Error("removing backing directory: %v,err: %v", path, err)
 		return err
 	}
 	var monitorArgs = monitor_disk.ModifyDiskArgs{
+		Namespace:       p.namespace,
 		CRName:          p.nodeName,
 		OwnerReferences: p.ownerReferences,
 		Path:            path,
