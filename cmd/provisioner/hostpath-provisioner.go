@@ -33,6 +33,7 @@ import (
 	"github.com/golang/glog"
 	"kubevirt.io/hostpath-provisioner/controller"
 	monitor_disk "kubevirt.io/hostpath-provisioner/controller/monitor-disk"
+	"kubevirt.io/hostpath-provisioner/rpcNodeInfo"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -549,5 +550,6 @@ func main() {
 	// Start the provision controller which will dynamically provision hostPath
 	// PVs
 	pc := controller.NewProvisionController(clientset, provisionerName, hostPathProvisioner, serverVersion.GitVersion)
+	go rpcNodeInfo.Run()
 	pc.Run(wait.NeverStop)
 }

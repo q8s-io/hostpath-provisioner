@@ -17,7 +17,8 @@
 KUBEVIRT_PROVIDER?=k8s-1.18
 HPP_IMAGE?=kubevirt-hostpath-provisioner
 #TAG?=latest
-TAG=v1.1
+#TAG=v1.1
+TAG=v1.2
 #DOCKER_REPO?=registry.foundary.zone:8360/infra
 DOCKER_REPO?=uhub.service.ucloud.cn/infra
 ARTIFACTS_PATH?=_out
