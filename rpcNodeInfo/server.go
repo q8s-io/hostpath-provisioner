@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
+	"runtime"
 
 	glog "k8s.io/klog"
 )
@@ -15,6 +16,7 @@ type NodeNICInfo struct {
 }
 type NodeNICsInfo struct {
 	HostName string
+	CoreNum  int
 	NICs     []NodeNICInfo
 }
 
@@ -40,6 +42,7 @@ func (*NodeInfo) GetNICInfo(args *string, nodeNICInfos *NodeNICsInfo) error {
 			})
 		}
 	}
+	nodeNICInfos.CoreNum = runtime.NumCPU()
 	glog.Info("node NIC info ", nodeNICInfos)
 	return nil
 }
