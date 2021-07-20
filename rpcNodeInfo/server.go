@@ -7,8 +7,11 @@ import (
 	"net/http"
 	"net/rpc"
 	"runtime"
+	"strings"
 
+	"github.com/shirou/gopsutil/mem"
 	glog "k8s.io/klog"
+	"kubevirt.io/hostpath-provisioner/tests"
 )
 
 type NodeNICInfo struct {
@@ -17,6 +20,7 @@ type NodeNICInfo struct {
 type NodeNICsInfo struct {
 	HostName string
 	CoreNum  int
+	Mem uint64
 	NICs     []NodeNICInfo
 }
 
@@ -35,9 +39,17 @@ func (*NodeInfo) GetNICInfo(args *string, nodeNICInfos *NodeNICsInfo) error {
 		}
 		addrs, _ := netInterface.Addrs()
 		for _, addr := range addrs {
+			var ip []string
+			if strings.Contains(addr.String(),":"){
+				continue
+			}else {
+				ip = strings.Split(addr.String(),"/")
+			}
+			memory, _ := mem.VirtualMemory()
+			nodeNICInfos.Mem = memory.Total / uint64(tests.GiB)
 			nodeNICInfos.NICs = append(nodeNICInfos.NICs, NodeNICInfo{
 				InterfaceName: netInterface.Name,
-				IP:            addr.String(),
+				IP:            ip[0],
 				Mac:           netInterface.HardwareAddr.String(),
 			})
 		}
