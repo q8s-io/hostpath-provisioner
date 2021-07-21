@@ -47,9 +47,10 @@ import (
 )
 
 const (
-	defaultProvisionerName = "kubevirt.io/hostpath-provisioner"
-	annStorageProvisioner  = "volume.beta.kubernetes.io/storage-provisioner"
-	StorageClassName       = "kubevirt-hostpath-provisioner"
+	defaultProvisionerName  = "kubevirt.io/hostpath-provisioner"
+	annStorageProvisioner   = "volume.beta.kubernetes.io/storage-provisioner"
+	StorageClassName        = "kubevirt-hostpath-provisioner"
+	RESOURCE_ALREADY_EXISTS = "already exists"
 )
 
 var provisionerName string
@@ -542,8 +543,10 @@ func main() {
 
 	err = createDiskMonitorCR(hostPathProvisioner.GetNamespace(), hostPathProvisioner.GetOwnerReferences(), hostPathProvisioner.GetNodeName())
 	if err != nil {
-		glog.Error("create Monitor CR err,process exited!: ", err)
-		return
+		if !strings.Contains(fmt.Sprintf("%s", err), RESOURCE_ALREADY_EXISTS) {
+			glog.Error("create Monitor CR err,process exited!: ", err)
+			return
+		}
 	}
 	go InspectionMonitorDisk(context.TODO(), hostPathProvisioner.GetNodeName(), hostPathProvisioner.GetNamespace(), hostPathProvisioner.GetNodeName())
 	glog.Infof("creating provisioner controller with name: %s\n", provisionerName)
