@@ -19,7 +19,9 @@ HPP_IMAGE?=kubevirt-hostpath-provisioner
 #TAG?=latest
 #TAG=v1.1
 # add feature get node nic info
-TAG=v1.2
+#TAG=v1.2
+# Manually configure the node service port number
+TAG=v1.3
 #DOCKER_REPO?=registry.foundary.zone:8360/infra
 DOCKER_REPO?=uhub.service.ucloud.cn/infra
 ARTIFACTS_PATH?=_out

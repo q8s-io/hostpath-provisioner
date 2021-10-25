@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
+	"os"
 	"runtime"
 	"strings"
 
@@ -20,7 +21,7 @@ type NodeNICInfo struct {
 type NodeNICsInfo struct {
 	HostName string
 	CoreNum  int
-	Mem uint64
+	Mem      uint64
 	NICs     []NodeNICInfo
 }
 
@@ -40,10 +41,10 @@ func (*NodeInfo) GetNICInfo(args *string, nodeNICInfos *NodeNICsInfo) error {
 		addrs, _ := netInterface.Addrs()
 		for _, addr := range addrs {
 			var ip []string
-			if strings.Contains(addr.String(),":"){
+			if strings.Contains(addr.String(), ":") {
 				continue
-			}else {
-				ip = strings.Split(addr.String(),"/")
+			} else {
+				ip = strings.Split(addr.String(), "/")
 			}
 			memory, _ := mem.VirtualMemory()
 			nodeNICInfos.Mem = memory.Total / uint64(tests.GiB)
@@ -66,7 +67,11 @@ func Run() {
 		return
 	}
 	rpc.HandleHTTP()
-	if err := http.ListenAndServe(":50234", nil); err != nil {
+	NodeInfoPort := os.Getenv("NODE_INFO_PORT")
+	if len(NodeInfoPort) == 0 {
+		NodeInfoPort = "50234"
+	}
+	if err := http.ListenAndServe(":"+NodeInfoPort, nil); err != nil {
 		log.Fatal("serve error:", err)
 	}
 }
